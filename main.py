@@ -22,11 +22,9 @@ def play_text_cz(text):
     tts.save(filename)
 
     with SuppressAlsaOutput():
-        # Convert to 44.1 kHz if needed, then play
         audio = AudioSegment.from_file(filename, format="mp3").set_frame_rate(44100)
         play(audio)
 
-    # Remove temp file
     os.remove(filename)
 
 def get_response_from_openai(prompt):
@@ -51,14 +49,17 @@ def listen_and_respond():
     recognizer.pause_threshold = 0.8
 
     print("Kalibrace mikrofonu...")
+    play_text_cz("Kalibrace mikrofonu...")
     with SuppressAlsaOutput(), sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source, duration=2)
-        print("Kalibrace dokončena. Poslouchám...")
-
+        print("Kalibrace dokončena...")
+        play_text_cz("Kalibrace dokončena.")
     while True:
         try:
-            # Listen for speech
             print("Poslouchám...")
+            # Optionally speak again here:
+            play_text_cz("Poslouchám.")
+
             with SuppressAlsaOutput(), sr.Microphone() as source:
                 audio = recognizer.listen(source)
 
@@ -74,10 +75,15 @@ def listen_and_respond():
 
         except sr.UnknownValueError:
             print("Nerozuměl jsem.")
+            play_text_cz("Nerozuměl jsem.")
         except sr.RequestError as e:
-            print(f"Chyba při požadavku; {e}")
+            msg = f"Chyba při požadavku; {e}"
+            print(msg)
+            play_text_cz(msg)
         except Exception as ex:
-            print(f"Nastala chyba: {ex}")
+            msg = f"Nastala chyba: {ex}"
+            print(msg)
+            play_text_cz(msg)
 
 if __name__ == "__main__":
     with warnings.catch_warnings():
