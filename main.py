@@ -3,25 +3,37 @@ from openai import OpenAI
 from gtts import gTTS
 import os
 from dotenv import load_dotenv
+import tempfile
+
+# pydub imports
+from pydub import AudioSegment
+from pydub.playback import play
 
 load_dotenv()
 
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# Text-to-Speech with Google TTS
-def text_to_speech_cz_local(text, filename="output.mp3"):
-    tts = gTTS(text=text, lang="cs")  # "cs" = Czech
-    os.makedirs("output", exist_ok=True)
+def play_text_cz(text):
+    """Generate Czech TTS using gTTS and play via pydub."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmpfile:
+        filename = tmpfile.name
+    tts = gTTS(text=text, lang="cs")
     tts.save(filename)
-    print(f"Audio saved as {filename}")
 
-# Function to Send Text to OpenAI Chat API
+    # Load and play via pydub
+    audio = AudioSegment.from_file(filename, format="mp3")
+    audio = audio.set_frame_rate(44100)
+    play(audio)
+
+    # Clean up
+    os.remove(filename)
+
 def get_response_from_openai(prompt):
     try:
         print("Odesílám text OpenAI API...")
         response = client.chat.completions.create(
-            model="gpt-4",  # or 'gpt-3.5-turbo'
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt}
@@ -32,7 +44,6 @@ def get_response_from_openai(prompt):
         print(f"Chyba při komunikaci s OpenAI API: {e}")
         return "Omlouvám se, ale došlo k chybě při komunikaci s OpenAI API."
 
-# Speech-to-Text and Continuous Processing
 def listen_and_respond():
     recognizer = sr.Recognizer()
     recognizer.dynamic_energy_threshold = True
@@ -55,9 +66,8 @@ def listen_and_respond():
                 response = get_response_from_openai(text)
                 print("Odpověď OpenAI:", response)
 
-                # Generate MP3 from the API response
-                filename = "output/output.mp3"
-                text_to_speech_cz_local(response, filename)
+                # Play TTS response
+                play_text_cz(response)
 
             except sr.UnknownValueError:
                 print("Nerozuměl jsem.")
