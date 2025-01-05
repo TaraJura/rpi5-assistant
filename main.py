@@ -54,7 +54,7 @@ def listen_and_respond():
         recognizer.adjust_for_ambient_noise(source, duration=2)
         print("Kalibrace dokončena...")
         play_text_cz("Kalibrace dokončena")
-        play_text_cz("Jsem Ninuška, tvůj asistent. Jak ti mohu pomoci?")
+        play_text_cz("Jsem Ninuška, Jak ti mohu pomoci?")
     while True:
         try:
             print("Poslouchám...")
