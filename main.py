@@ -49,11 +49,11 @@ def listen_and_respond():
     recognizer.pause_threshold = 0.8
 
     print("Kalibrace mikrofonu...")
-    play_text_cz("Kalibrace mikrofonu...")
+    play_text_cz("Kalibrace mikrofonu")
     with SuppressAlsaOutput(), sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source, duration=2)
         print("Kalibrace dokončena...")
-        play_text_cz("Kalibrace dokončena.")
+        play_text_cz("Kalibrace dokončena")
     while True:
         try:
             print("Poslouchám...")
