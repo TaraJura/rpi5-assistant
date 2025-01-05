@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import tempfile
 from pydub import AudioSegment
 from pydub.playback import play
+import warnings
+from utils.error_suppressor import SuppressAlsaOutput  # Import the class
 
 load_dotenv()
 
@@ -19,9 +21,10 @@ def play_text_cz(text):
     tts = gTTS(text=text, lang="cs")
     tts.save(filename)
 
-    # Convert to 44.1 kHz if needed, then play
-    audio = AudioSegment.from_file(filename, format="mp3").set_frame_rate(44100)
-    play(audio)
+    with SuppressAlsaOutput():
+        # Convert to 44.1 kHz if needed, then play
+        audio = AudioSegment.from_file(filename, format="mp3").set_frame_rate(44100)
+        play(audio)
 
     # Remove temp file
     os.remove(filename)
@@ -48,7 +51,7 @@ def listen_and_respond():
     recognizer.pause_threshold = 0.8
 
     print("Kalibrace mikrofonu...")
-    with sr.Microphone() as source:
+    with SuppressAlsaOutput(), sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source, duration=2)
         print("Kalibrace dokončena. Poslouchám...")
 
@@ -56,7 +59,7 @@ def listen_and_respond():
         try:
             # Listen for speech
             print("Poslouchám...")
-            with sr.Microphone() as source:
+            with SuppressAlsaOutput(), sr.Microphone() as source:
                 audio = recognizer.listen(source)
 
             text = recognizer.recognize_google(audio, language='cs-CZ')
@@ -77,4 +80,6 @@ def listen_and_respond():
             print(f"Nastala chyba: {ex}")
 
 if __name__ == "__main__":
-    listen_and_respond()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        listen_and_respond()
