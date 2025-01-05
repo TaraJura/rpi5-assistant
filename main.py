@@ -46,7 +46,7 @@ def listen_and_respond():
     recognizer = sr.Recognizer()
     recognizer.dynamic_energy_threshold = True
     recognizer.energy_threshold = 5000
-    recognizer.pause_threshold = 0.9
+    recognizer.pause_threshold = 1
 
     print("Kalibrace mikrofonu...")
     play_text_cz("Kalibrace mikrofonu")
