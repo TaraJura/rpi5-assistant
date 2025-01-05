@@ -4,8 +4,6 @@ from gtts import gTTS
 import os
 from dotenv import load_dotenv
 import tempfile
-
-# pydub imports
 from pydub import AudioSegment
 from pydub.playback import play
 
@@ -15,18 +13,17 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 def play_text_cz(text):
-    """Generate Czech TTS using gTTS and play via pydub."""
+    """Generate Czech TTS using gTTS and play via pydub (44.1 kHz)."""
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmpfile:
         filename = tmpfile.name
     tts = gTTS(text=text, lang="cs")
     tts.save(filename)
 
-    # Load and play via pydub
-    audio = AudioSegment.from_file(filename, format="mp3")
-    audio = audio.set_frame_rate(44100)
+    # Convert to 44.1 kHz if needed, then play
+    audio = AudioSegment.from_file(filename, format="mp3").set_frame_rate(44100)
     play(audio)
 
-    # Clean up
+    # Remove temp file
     os.remove(filename)
 
 def get_response_from_openai(prompt):
@@ -55,26 +52,29 @@ def listen_and_respond():
         recognizer.adjust_for_ambient_noise(source, duration=2)
         print("Kalibrace dokončena. Poslouchám...")
 
-        while True:
-            try:
-                print("Poslouchám...")
+    while True:
+        try:
+            # Listen for speech
+            print("Poslouchám...")
+            with sr.Microphone() as source:
                 audio = recognizer.listen(source)
-                text = recognizer.recognize_google(audio, language='cs-CZ')
-                print("Řekl jsi:", text)
 
-                # Send recognized text to OpenAI
-                response = get_response_from_openai(text)
-                print("Odpověď OpenAI:", response)
+            text = recognizer.recognize_google(audio, language='cs-CZ')
+            print("Řekl jsi:", text)
 
-                # Play TTS response
-                play_text_cz(response)
+            # Get AI response
+            response = get_response_from_openai(text)
+            print("Odpověď OpenAI:", response)
 
-            except sr.UnknownValueError:
-                print("Nerozuměl jsem.")
-            except sr.RequestError as e:
-                print(f"Chyba při požadavku; {e}")
-            except Exception as ex:
-                print(f"Nastala chyba: {ex}")
+            # Speak AI response
+            play_text_cz(response)
+
+        except sr.UnknownValueError:
+            print("Nerozuměl jsem.")
+        except sr.RequestError as e:
+            print(f"Chyba při požadavku; {e}")
+        except Exception as ex:
+            print(f"Nastala chyba: {ex}")
 
 if __name__ == "__main__":
     listen_and_respond()
