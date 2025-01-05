@@ -7,7 +7,7 @@ import tempfile
 from pydub import AudioSegment
 from pydub.playback import play
 import warnings
-from utils.error_suppressor import SuppressAlsaOutput  # Import the class
+from utils.error_suppressor import SuppressAlsaOutput
 
 load_dotenv()
 
@@ -45,15 +45,15 @@ def get_response_from_openai(prompt):
 def listen_and_respond():
     recognizer = sr.Recognizer()
     recognizer.dynamic_energy_threshold = True
-    recognizer.energy_threshold = 4000
-    recognizer.pause_threshold = 0.8
+    recognizer.energy_threshold = 5000
+    recognizer.pause_threshold = 0.9
 
     print("Kalibrace mikrofonu...")
     play_text_cz("Kalibrace mikrofonu")
     with SuppressAlsaOutput(), sr.Microphone() as source:
-        recognizer.adjust_for_ambient_noise(source, duration=2)
+        recognizer.adjust_for_ambient_noise(source, duration=3)
         print("Kalibrace dokončena...")
-        play_text_cz("Kalibrace dokončena")
+        play_text_cz("Kalibrace dokončena.")
         play_text_cz("Jsem Ninuška, Jak ti mohu pomoci?")
     while True:
         try:
