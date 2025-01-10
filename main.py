@@ -42,8 +42,8 @@ def capture_webcam_image():
     _, buffer = cv2.imencode('.jpg', frame)
     return base64.b64encode(buffer).decode('utf-8')
 
-def analyze_image(base64_image, client):
-    system_prompt = "1. Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Co je na tomto obrázku? 4. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta."
+def analyze_image(base64_image, client, custom_prompt=''):
+    system_prompt = "1. Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Co je na tomto obrázku? 4. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta." + custom_prompt
     try:
         resp = client.chat.completions.create(
             model="gpt-4o",
@@ -120,7 +120,7 @@ def listen_and_respond():
                 base64_image = capture_webcam_image()
                 print("Analyzuji obraz...")
                 play_text_cz("Analyzuji obraz.")
-                response = analyze_image(base64_image, client)
+                response = analyze_image(base64_image, client, text)
             else:
                 response = get_response_from_openai(text)
             
