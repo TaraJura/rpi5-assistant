@@ -33,7 +33,6 @@ def capture_webcam_image():
     if not cap.isOpened():
         raise IOError(f"Cannot open camera {cam_index}")
     
-    time.sleep(2)  # let camera warm up
     ret, frame = cap.read()
     cap.release()
     
@@ -47,7 +46,7 @@ def analyze_image(base64_image, client):
     system_prompt = "1. Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Co je na tomto obrázku? 4. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta."
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
                 {
                     "role": "user",
@@ -80,6 +79,7 @@ def get_response_from_openai(prompt):
     sestem_prompt = "1.Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta."
     try:
         print("Odesílám text OpenAI API...")
+        play_text_cz("Zpracovávám otázku!")
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -97,15 +97,12 @@ def listen_and_respond():
     recognizer.dynamic_energy_threshold = True
     recognizer.energy_threshold = 5000
     recognizer.pause_threshold = 1
-
     print("Kalibrace mikrofonu...")
-    play_text_cz("Kalibrace mikrofonu")
     with SuppressAlsaOutput(), sr.Microphone() as source:
-        recognizer.adjust_for_ambient_noise(source, duration=3)
+        recognizer.adjust_for_ambient_noise(source, duration=1)
         print("Kalibrace dokončena...")
-        play_text_cz("Kalibrace dokončena.")
-        play_text_cz("Jsem Ninuška, Jak ti mohu pomoci? Řekni 'podívej se' pro analýzu obrazu z kamery.")
-
+        play_text_cz("Jsem Ninuška, Jak ti mohu pomoci?")
+        play_text_cz("Řekni 'podívej se' pro analýzu obrazu z kamery.")
     while True:
         try:
             print("Poslouchám...")
@@ -117,7 +114,6 @@ def listen_and_respond():
             text = recognizer.recognize_google(audio, language='cs-CZ')
             print("Řekl jsi:", text)
 
-            # Check for vision command
             if "podívej" in text.lower() or "koukni" in text.lower():
                 print("Zachycuji obraz z kamery...")
                 play_text_cz("Zachycuji obraz z kamery.")
@@ -126,7 +122,6 @@ def listen_and_respond():
                 play_text_cz("Analyzuji obraz.")
                 response = analyze_image(base64_image, client)
             else:
-                # Get regular AI response
                 response = get_response_from_openai(text)
             
             print("Odpověď OpenAI:", response)
