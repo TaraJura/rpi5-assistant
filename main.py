@@ -13,10 +13,10 @@ import base64
 import time
 
 load_dotenv()
-
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 def get_first_active_camera(max_devices=3):
+    print('get_first_active_camera')
     for i in range(max_devices):
         cap = cv2.VideoCapture(i)
         if cap.isOpened():
@@ -25,6 +25,7 @@ def get_first_active_camera(max_devices=3):
     return None
 
 def capture_webcam_image():
+    print('capture_webcam_image')
     cam_index = get_first_active_camera()
     if cam_index is None:
         raise IOError("No active camera found.")
@@ -43,7 +44,8 @@ def capture_webcam_image():
     return base64.b64encode(buffer).decode('utf-8')
 
 def analyze_image(base64_image, client, custom_prompt=''):
-    system_prompt = "1. Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Co je na tomto obrázku? 4. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta." + custom_prompt
+    print('analyze_image')
+    system_prompt = "1. Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Co je na tomto obrázku? Když to nedokážeš poznat tak řekni alespoň přibližně a nebo důvod proč nemůžeš odpovědět. 4. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta." + custom_prompt
     try:
         resp = client.chat.completions.create(
             model="gpt-4o",
@@ -76,6 +78,7 @@ def play_text_cz(text):
     os.remove(filename)
 
 def get_response_from_openai(prompt):
+    print('get_response_from_openai')
     sestem_prompt = "1.Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta."
     try:
         print("Odesílám text OpenAI API...")
@@ -93,6 +96,7 @@ def get_response_from_openai(prompt):
         return "Omlouvám se, ale došlo k chybě při komunikaci s OpenAI API."
 
 def listen_and_respond():
+    print('listen_and_respond')
     recognizer = sr.Recognizer()
     recognizer.dynamic_energy_threshold = True
     recognizer.energy_threshold = 5000
