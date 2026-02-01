@@ -1,22 +1,115 @@
+#!/usr/bin/env python3
+"""Ninuška v2 — Czech voice assistant powered by Claude Code on Raspberry Pi 5."""
+
 import speech_recognition as sr
-from openai import OpenAI
 from gtts import gTTS
 import os
-from dotenv import load_dotenv
+import sys
+import signal
+import subprocess
+import json
 import tempfile
-from pydub import AudioSegment
-from pydub.playback import play
 import warnings
 from utils.error_suppressor import SuppressAlsaOutput
 import cv2
-import base64
-import time
 
-load_dotenv()
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+SYSTEM_PROMPT = (
+    "Jsi hlasový AI asistent Ninuška na Raspberry Pi. "
+    "Odpovídej VŽDY česky. "
+    "KRITICKÉ: Odpovědi musí být co nejkratší — maximálně 1-2 věty. "
+    "Žádné formátování, žádný markdown, žádné backticky. "
+    "Pokud uživatel chce provést příkaz, proveď ho a vrať pouze výsledek."
+)
 
+# ---------------------------------------------------------------------------
+# Signal handling
+# ---------------------------------------------------------------------------
+def _signal_handler(sig, frame):
+    print("\nUkončuji Ninušku...")
+    os._exit(0)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
+
+# ---------------------------------------------------------------------------
+# Audio playback — identical to original working code
+# ---------------------------------------------------------------------------
+def play_text_cz(text):
+    """Generate Czech TTS using gTTS and play via ffplay."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmpfile:
+        filename = tmpfile.name
+    tts = gTTS(text=text, lang="cs")
+    tts.save(filename)
+
+    try:
+        subprocess.run(
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", filename],
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        print("Playback timed out.")
+    finally:
+        os.remove(filename)
+
+
+# ---------------------------------------------------------------------------
+# Claude Code integration
+# ---------------------------------------------------------------------------
+def run_claude(prompt, image_path=None):
+    """Send a prompt to claude CLI and return the response text."""
+    full_cmd = [
+        "claude", "-p", prompt,
+        "--system-prompt", SYSTEM_PROMPT,
+        "--dangerously-skip-permissions",
+        "--output-format", "json",
+    ]
+    if image_path:
+        full_cmd.extend(["--add-dir", os.path.dirname(image_path)])
+        prompt = f"{prompt}\n\nAnalyzuj obrázek: {image_path}"
+
+    print(f"Claude prompt: {prompt[:100]}")
+    try:
+        result = subprocess.run(
+            full_cmd, capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            print(f"Claude error: {result.stderr[:300]}")
+            return f"Chyba při volání Claude: {result.stderr[:200]}"
+
+        try:
+            data = json.loads(result.stdout)
+            response = data.get("result", result.stdout)
+        except json.JSONDecodeError:
+            response = result.stdout.strip()
+
+        print(f"Claude response ({len(response)} chars): {response}")
+        return response
+
+    except subprocess.TimeoutExpired:
+        return "Claude neodpověděl včas."
+    except Exception as e:
+        return f"Chyba: {e}"
+
+
+def summarize_for_speech(text):
+    """If text is too long for TTS, ask Claude to summarize in one Czech sentence."""
+    if len(text) <= 200:
+        return text
+    print("Summarizing long response for TTS...")
+    summary = run_claude(
+        f"Shrň následující text do jedné krátké české věty:\n\n{text}"
+    )
+    return summary if len(summary) <= 300 else summary[:300]
+
+
+# ---------------------------------------------------------------------------
+# Camera
+# ---------------------------------------------------------------------------
 def get_first_active_camera(max_devices=3):
-    print('get_first_active_camera')
     for i in range(max_devices):
         cap = cv2.VideoCapture(i)
         if cap.isOpened():
@@ -24,89 +117,39 @@ def get_first_active_camera(max_devices=3):
             return i
     return None
 
+
 def capture_webcam_image():
-    print('capture_webcam_image')
     cam_index = get_first_active_camera()
     if cam_index is None:
-        raise IOError("No active camera found.")
-    
+        raise IOError("Nebyla nalezena žádná kamera.")
     cap = cv2.VideoCapture(cam_index)
     if not cap.isOpened():
-        raise IOError(f"Cannot open camera {cam_index}")
-    
+        raise IOError(f"Nelze otevřít kameru {cam_index}")
     ret, frame = cap.read()
     cap.release()
-    
     if not ret:
-        raise IOError("Failed to capture image")
-        
-    _, buffer = cv2.imencode('.jpg', frame)
-    return base64.b64encode(buffer).decode('utf-8')
+        raise IOError("Nepodařilo se zachytit obrázek")
+    path = "/tmp/ninuska_cam.jpg"
+    cv2.imwrite(path, frame)
+    return path
 
-def analyze_image(base64_image, client, custom_prompt=''):
-    print('analyze_image')
-    system_prompt = "1. Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Co je na tomto obrázku? Když to nedokážeš poznat tak řekni alespoň přibližně a nebo důvod proč nemůžeš odpovědět. 4. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta." + custom_prompt
-    try:
-        resp = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": system_prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ]
-                }
-            ],
-            max_tokens=300
-        )
-        return resp.choices[0].message.content
-    except Exception as e:
-        return f"Error analyzing image: {e}"
 
-def play_text_cz(text):
-    """Generate Czech TTS using gTTS and play via pydub (44.1 kHz)."""
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmpfile:
-        filename = tmpfile.name
-    tts = gTTS(text=text, lang="cs")
-    tts.save(filename)
-
-    with SuppressAlsaOutput():
-        audio = AudioSegment.from_file(filename, format="mp3").set_frame_rate(44100)
-        play(audio)
-
-    os.remove(filename)
-
-def get_response_from_openai(prompt):
-    print('get_response_from_openai')
-    sestem_prompt = "1.Jsi AI asistent se jménem Ninuška. 2. Všechen input i output bude v Českém jazyce. 3. Všechny tvoje odpovědi musí být krátké, maximálně jedna věta."
-    try:
-        print("Odesílám text OpenAI API...")
-        play_text_cz("Zpracovávám otázku!")
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": sestem_prompt},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Chyba při komunikaci s OpenAI API: {e}")
-        return "Omlouvám se, ale došlo k chybě při komunikaci s OpenAI API."
-
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
 def listen_and_respond():
-    print('listen_and_respond')
     recognizer = sr.Recognizer()
     recognizer.dynamic_energy_threshold = True
     recognizer.energy_threshold = 5000
     recognizer.pause_threshold = 1
+
     print("Kalibrace mikrofonu...")
     with SuppressAlsaOutput(), sr.Microphone() as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
-        print("Kalibrace dokončena...")
-        play_text_cz("Jsem Ninuška, Jak ti mohu pomoci?")
-        play_text_cz("Řekni 'podívej se' pro analýzu obrazu z kamery.")
+    print("Kalibrace dokončena.")
+    play_text_cz("Jsem Ninuška s mozkem Claude. Jak ti mohu pomoci?")
+    play_text_cz("Řekni 'podívej se' pro analýzu obrazu z kamery.")
+
     while True:
         try:
             print("Poslouchám...")
@@ -115,33 +158,34 @@ def listen_and_respond():
             with SuppressAlsaOutput(), sr.Microphone() as source:
                 audio = recognizer.listen(source)
 
-            text = recognizer.recognize_google(audio, language='cs-CZ')
-            print("Řekl jsi:", text)
+            text = recognizer.recognize_google(audio, language="cs-CZ")
+            print(f"Rozpoznáno: {text}")
 
             if "podívej" in text.lower() or "koukni" in text.lower():
-                print("Zachycuji obraz z kamery...")
                 play_text_cz("Zachycuji obraz z kamery.")
-                base64_image = capture_webcam_image()
-                print("Analyzuji obraz...")
+                image_path = capture_webcam_image()
                 play_text_cz("Analyzuji obraz.")
-                response = analyze_image(base64_image, client, text)
+                response = run_claude(text, image_path=image_path)
             else:
-                response = get_response_from_openai(text)
-            
-            print("Odpověď OpenAI:", response)
-            play_text_cz(response)
+                play_text_cz("Zpracovávám.")
+                response = run_claude(text)
+
+            spoken = summarize_for_speech(response)
+            print(f"TTS: {spoken}")
+            play_text_cz(spoken)
 
         except sr.UnknownValueError:
             print("Nerozuměl jsem.")
             play_text_cz("Nerozuměl jsem.")
         except sr.RequestError as e:
-            msg = f"Chyba při požadavku; {e}"
+            msg = f"Chyba při rozpoznávání řeči: {e}"
             print(msg)
             play_text_cz(msg)
         except Exception as ex:
             msg = f"Nastala chyba: {ex}"
             print(msg)
             play_text_cz(msg)
+
 
 if __name__ == "__main__":
     with warnings.catch_warnings():
